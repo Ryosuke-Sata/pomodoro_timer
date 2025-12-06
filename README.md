@@ -27,7 +27,7 @@ PythonとCustomTkinterを用いて開発されており、タスク名記録、C
 ## 📦 インストール方法
 
 ### 1. リポジトリのクローン（またはファイルのダウンロード）
-ソースコード（`pomodoro_full.py`）を任意のディレクトリに配置してください。
+ソースコード（`pomodoro.py`）を任意のディレクトリに配置してください。
 
 ### 2. 仮想環境の作成 (推奨)
 ```bash
@@ -48,23 +48,23 @@ pip install customtkinter winotify
 ### コマンドでの実行
 仮想環境に入った状態で以下を実行します。
 ```bash
-python pomodoro_full.py
+python pomodoro.py
 ```
 
 ### ショートカットやバッチファイルでの実行に関する注意
 仮想環境（venv）を使用している場合、通常のショートカットではライブラリが見つからずエラーになることがあります。以下のいずれかの方法を推奨します。
 
-#### A. 起動用バッチファイル (`start.bat`) を作成する `pomodoro_full.py` と同じフォルダに以下の内容で作成し、これをダブルクリックします。
+#### A. 起動用バッチファイル (`start.bat`) を作成する `pomodoro.py` と同じフォルダに以下の内容で作成し、これをダブルクリックします。
 ```batch
 @echo off
 cd /d %~dp0
 call .venv\Scripts\activate
-start pythonw pomodoro_full.py
+start pythonw pomodoro.py
 ```
 
 #### B. ショートカットのリンク先を編集する ショートカットのプロパティを開き、リンク先を「venv内のpythonw.exe」経由で指定します。
 ```text
-"C:\Path\To\.venv\Scripts\pythonw.exe" "C:\Path\To\pomodoro_full.py"
+"C:\Path\To\.venv\Scripts\pythonw.exe" "C:\Path\To\pomodoro.py"
 ```
 
 ## 🔧 アプリケーション化（Exe化）の手順
@@ -77,14 +77,14 @@ pip install pyinstaller
 
 2. Exeファイルの作成
 ```bash
-pyinstaller --noconsole --onefile pomodoro_full.py
+pyinstaller --noconsole --onefile pomodoro.py
 ```
 
-3. 実行 `dist` フォルダ内に生成された `pomodoro_full.exe` を使用してください。
+3. 実行 `dist` フォルダ内に生成された `pomodoro.exe` を使用してください。
 
 ## 📂 データと履歴の保存場所について
 本アプリは、実行ファイル（またはスクリプト）と同じディレクトリに `work_log.db` というデータベースファイルを自動生成して履歴を保存します。
 
-- 注意点: `pomodoro_full.exe` を別の場所（別のフォルダやPC）に移動する場合、履歴を引き継ぐには `work_log.db` も一緒に移動させてください。
+- 注意点: `pomodoro.exe` を別の場所（別のフォルダやPC）に移動する場合、履歴を引き継ぐには `work_log.db` も一緒に移動させてください。
 
 - exeファイル単体だけを移動すると、移動先で新しい（空の）データベースが作成され、履歴がリセットされたようになります。

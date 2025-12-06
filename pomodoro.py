@@ -27,7 +27,6 @@ class PomodoroApp(ctk.CTk):
         self.selected_duration = 25 * 60
         self.timer_id = None
         self.is_mini_mode = False
-        self.previous_geometry = "400x600"
         
         # データベース初期化＆更新
         self.init_db()
@@ -40,7 +39,7 @@ class PomodoroApp(ctk.CTk):
         self.show_main_view()
 
     def init_db(self):
-        """DB初期化とテーブル更新（タスク名カラムの追加）"""
+        """DB初期化とテーブル更新（タスク名・時刻範囲カラムの対応）"""
         self.conn = sqlite3.connect("work_log.db")
         self.cursor = self.conn.cursor()
         
@@ -50,15 +49,24 @@ class PomodoroApp(ctk.CTk):
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 date TEXT,
                 duration_minutes INTEGER,
-                task_name TEXT
+                task_name TEXT,
+                time_range TEXT
             )
         """)
         
         # 既存DBへのカラム追加（アップデート対応）
+        # タスク名カラムがない場合に追加
         try:
             self.cursor.execute("SELECT task_name FROM logs LIMIT 1")
         except sqlite3.OperationalError:
             self.cursor.execute("ALTER TABLE logs ADD COLUMN task_name TEXT")
+            self.conn.commit()
+
+        # 時刻範囲カラムがない場合に追加
+        try:
+            self.cursor.execute("SELECT time_range FROM logs LIMIT 1")
+        except sqlite3.OperationalError:
+            self.cursor.execute("ALTER TABLE logs ADD COLUMN time_range TEXT")
             self.conn.commit()
             
         self.conn.commit()
@@ -166,9 +174,7 @@ class PomodoroApp(ctk.CTk):
         self.is_mini_mode = True
         self.main_frame.pack_forget()
         self.mini_frame.pack(fill="both", expand=True)
-        self.previous_geometry = self.geometry() # サイズ記憶
         self.geometry("200x150") # ミニサイズ
-        # ミニモード時は自動で最前面にするのが親切
         self.attributes('-topmost', True) 
 
     def switch_to_main(self):
@@ -176,14 +182,12 @@ class PomodoroApp(ctk.CTk):
         self.mini_frame.pack_forget()
         self.main_frame.pack(fill="both", expand=True)
         self.geometry("400x600") # 元のサイズ
-        # スイッチの状態に合わせて最前面設定を戻す
         self.toggle_always_on_top()
 
     # --- タイマーロジック ---
 
     def toggle_always_on_top(self):
         state = self.top_switch.get() == 1
-        # ミニモード中は常に最前面、そうでなければスイッチ依存
         if self.is_mini_mode:
             self.attributes('-topmost', True)
         else:
@@ -206,7 +210,7 @@ class PomodoroApp(ctk.CTk):
         if not self.timer_running:
             self.timer_running = True
             self.start_btn.configure(text="PAUSE", fg_color="orange")
-            self.mini_start_btn.configure(fg_color="orange") # ミニモード用
+            self.mini_start_btn.configure(fg_color="orange")
             self.status_label.configure(text="Concentrating...", text_color="#3B8ED0")
             self.count_down()
         else:
@@ -242,13 +246,11 @@ class PomodoroApp(ctk.CTk):
         self.mini_start_btn.configure(fg_color="#1f6aa5")
         self.status_label.configure(text="Finished!", text_color="green")
         
-        # 1. 音再生
+        # 音と通知
         threading.Thread(target=self.play_alarm_sound, daemon=True).start()
-
-        # 2. Windowsネイティブ通知 (トースト)
         self.send_notification()
 
-        # 3. ログ保存
+        # ログ保存
         mode = self.mode_var.get()
         if "Focus" in mode:
             duration = 25 if "25" in mode else 50
@@ -258,11 +260,7 @@ class PomodoroApp(ctk.CTk):
             self.save_log(duration, task_name)
             self.load_history()
 
-        # ウィンドウを強調
         self.attributes('-topmost', True)
-        if not self.is_mini_mode:
-             # 少し経ったら設定に戻すなどの処理も可能だが、ここでは気づかせるために前面維持
-             pass
 
     def play_alarm_sound(self):
         for _ in range(3): 
@@ -274,26 +272,37 @@ class PomodoroApp(ctk.CTk):
             time.sleep(0.8)
 
     def send_notification(self):
-        """Windows 11 トースト通知"""
         mode = self.mode_var.get()
         msg = "お疲れ様でした！休憩しましょう。" if "Focus" in mode else "休憩終了！作業に戻りましょう。"
         
-        toast = Notification(
-            app_id="Pomodoro Timer",
-            title="タイマー終了",
-            msg=msg,
-            duration="long"
-        )
-        toast.set_audio(audio.Default, loop=False)
-        toast.show()
+        try:
+            toast = Notification(
+                app_id="Pomodoro Timer",
+                title="タイマー終了",
+                msg=msg,
+                duration="long"
+            )
+            toast.set_audio(audio.Default, loop=False)
+            toast.show()
+        except Exception:
+            pass
 
     # --- データ管理 ---
 
     def save_log(self, minutes, task_name):
+        # 現在時刻から開始時間を逆算
+        now = datetime.datetime.now()
+        end_time_str = now.strftime("%H:%M")
+        start_time = now - datetime.timedelta(minutes=minutes)
+        start_time_str = start_time.strftime("%H:%M")
+        
+        # 表示用の時間範囲文字列 (例: 14:00 - 14:25)
+        time_range = f"{start_time_str} - {end_time_str}"
         today = datetime.date.today().strftime("%Y-%m-%d")
+
         self.cursor.execute(
-            "INSERT INTO logs (date, duration_minutes, task_name) VALUES (?, ?, ?)",
-            (today, minutes, task_name)
+            "INSERT INTO logs (date, duration_minutes, task_name, time_range) VALUES (?, ?, ?, ?)",
+            (today, minutes, task_name, time_range)
         )
         self.conn.commit()
 
@@ -301,43 +310,41 @@ class PomodoroApp(ctk.CTk):
         for widget in self.history_scroll.winfo_children():
             widget.destroy()
 
-        # 詳細表示に変更（タスク名も見せる）
-        self.cursor.execute("SELECT date, duration_minutes, task_name FROM logs ORDER BY id DESC LIMIT 50")
+        self.cursor.execute("SELECT date, duration_minutes, task_name, time_range FROM logs ORDER BY id DESC LIMIT 50")
         rows = self.cursor.fetchall()
 
         if not rows:
             ctk.CTkLabel(self.history_scroll, text="履歴なし").pack(pady=10)
             return
 
-        for date_str, mins, task in rows:
+        for date_str, mins, task, time_rng in rows:
             f = ctk.CTkFrame(self.history_scroll)
             f.pack(fill="x", pady=2, padx=5)
             
-            # 日付
-            ctk.CTkLabel(f, text=date_str, font=("Arial", 10), width=80).pack(side="left", padx=5)
-            # タスク名
+            # 日付と時間を表示 (例: 10/08 14:00-14:25)
+            time_display = time_rng if time_rng else ""
+            date_display = f"{date_str[5:]} {time_display}" # 月日 + 時間
+
+            # レイアウト
+            ctk.CTkLabel(f, text=date_display, font=("Arial", 10), width=110, anchor="w").pack(side="left", padx=5)
             ctk.CTkLabel(f, text=task if task else "-", font=("Arial", 12), anchor="w").pack(side="left", padx=5, fill="x", expand=True)
-            # 時間
             ctk.CTkLabel(f, text=f"{mins}分", font=("Arial", 12, "bold"), text_color="#3B8ED0").pack(side="right", padx=5)
 
     def export_csv(self):
-        """データベースの内容をCSVに出力"""
         try:
             filename = f"pomodoro_log_{datetime.date.today()}.csv"
             
-            self.cursor.execute("SELECT * FROM logs")
+            self.cursor.execute("SELECT id, date, duration_minutes, task_name, time_range FROM logs")
             rows = self.cursor.fetchall()
             
             with open(filename, "w", newline="", encoding="utf-8_sig") as f:
                 writer = csv.writer(f)
-                writer.writerow(["ID", "Date", "Minutes", "Task Name"]) # ヘッダー
+                writer.writerow(["ID", "Date", "Minutes", "Task Name", "Time Range"]) # ヘッダー
                 writer.writerows(rows)
             
-            # 完了通知をUI上に簡易表示（今回はボタン文字を変える）
             self.export_btn.configure(text=f"出力完了: {filename}", fg_color="gray")
             self.after(3000, lambda: self.export_btn.configure(text="CSV出力 (Excel用)", fg_color="green"))
             
-            # フォルダを開く
             os.startfile(".")
             
         except Exception as e:
