@@ -38,8 +38,11 @@ class PomodoroApp(ctk.CTk):
         # 初期状態はメインモードを表示
         self.show_main_view()
 
+        # 時計の更新開始
+        self.update_clock()
+
     def init_db(self):
-        """DB初期化とテーブル更新（タスク名・時刻範囲カラムの対応）"""
+        """DB初期化とテーブル更新"""
         self.conn = sqlite3.connect("work_log.db")
         self.cursor = self.conn.cursor()
         
@@ -54,15 +57,13 @@ class PomodoroApp(ctk.CTk):
             )
         """)
         
-        # 既存DBへのカラム追加（アップデート対応）
-        # タスク名カラムがない場合に追加
+        # カラム追加（アップデート対応）
         try:
             self.cursor.execute("SELECT task_name FROM logs LIMIT 1")
         except sqlite3.OperationalError:
             self.cursor.execute("ALTER TABLE logs ADD COLUMN task_name TEXT")
             self.conn.commit()
 
-        # 時刻範囲カラムがない場合に追加
         try:
             self.cursor.execute("SELECT time_range FROM logs LIMIT 1")
         except sqlite3.OperationalError:
@@ -77,6 +78,10 @@ class PomodoroApp(ctk.CTk):
         """通常モードのUI作成"""
         self.main_frame = ctk.CTkFrame(self, fg_color="transparent")
         
+        # メイン時計
+        self.clock_label = ctk.CTkLabel(self.main_frame, text="--:--:--", font=("Arial", 24, "bold"), text_color="gray")
+        self.clock_label.pack(anchor="ne", padx=20, pady=(10, 0))
+
         # タブ
         self.tabview = ctk.CTkTabview(self.main_frame, width=380, height=500)
         self.tabview.pack(padx=10, pady=5, fill="both", expand=True)
@@ -86,12 +91,10 @@ class PomodoroApp(ctk.CTk):
         # --- Timer Tab ---
         t_frame = self.tabview.tab("Timer")
 
-        # 1. タスク名入力
-        ctk.CTkLabel(t_frame, text="作業内容 (Task Name)", font=("Arial", 12)).pack(pady=(10, 0))
+        ctk.CTkLabel(t_frame, text="作業内容 (Task Name)", font=("Arial", 12)).pack(pady=(5, 0))
         self.task_entry = ctk.CTkEntry(t_frame, placeholder_text="例: 英語の勉強", width=250)
         self.task_entry.pack(pady=5)
 
-        # 2. モード選択
         self.mode_var = ctk.StringVar(value="Focus 25")
         self.mode_segment = ctk.CTkSegmentedButton(
             t_frame,
@@ -99,15 +102,13 @@ class PomodoroApp(ctk.CTk):
             command=self.change_mode,
             variable=self.mode_var
         )
-        self.mode_segment.pack(pady=15)
+        self.mode_segment.pack(pady=10)
 
-        # 3. タイマー表示
         self.time_label = ctk.CTkLabel(t_frame, text="25:00", font=("Roboto Medium", 80))
-        self.time_label.pack(pady=10)
+        self.time_label.pack(pady=5)
 
-        # 4. コントロールボタン
         btn_frame = ctk.CTkFrame(t_frame, fg_color="transparent")
-        btn_frame.pack(pady=10)
+        btn_frame.pack(pady=5)
         
         self.start_btn = ctk.CTkButton(btn_frame, text="START", command=self.start_timer, width=100, height=40, font=("Arial", 16))
         self.start_btn.grid(row=0, column=0, padx=10)
@@ -115,9 +116,8 @@ class PomodoroApp(ctk.CTk):
         self.reset_btn = ctk.CTkButton(btn_frame, text="RESET", command=self.reset_timer, width=100, height=40, fg_color="gray", hover_color="darkgray", font=("Arial", 16))
         self.reset_btn.grid(row=0, column=1, padx=10)
 
-        # 5. オプション（最前面 & ミニモード）
         opt_frame = ctk.CTkFrame(t_frame, fg_color="transparent")
-        opt_frame.pack(pady=20)
+        opt_frame.pack(pady=15)
         
         self.top_switch = ctk.CTkSwitch(opt_frame, text="常に最前面", command=self.toggle_always_on_top)
         self.top_switch.pack(side="left", padx=10)
@@ -125,7 +125,6 @@ class PomodoroApp(ctk.CTk):
         self.mini_btn = ctk.CTkButton(opt_frame, text="ミニモードへ", command=self.switch_to_mini, width=80, fg_color="teal")
         self.mini_btn.pack(side="left", padx=10)
 
-        # ステータス
         self.status_label = ctk.CTkLabel(t_frame, text="Ready", text_color="gray")
         self.status_label.pack(side="bottom", pady=5)
 
@@ -136,7 +135,6 @@ class PomodoroApp(ctk.CTk):
         self.history_scroll = ctk.CTkScrollableFrame(h_frame, width=320, height=300)
         self.history_scroll.pack()
 
-        # CSVエクスポートボタン
         self.export_btn = ctk.CTkButton(h_frame, text="CSV出力 (Excel用)", command=self.export_csv, fg_color="green", hover_color="darkgreen")
         self.export_btn.pack(pady=10)
         
@@ -148,9 +146,14 @@ class PomodoroApp(ctk.CTk):
         """ミニモードのUI作成"""
         self.mini_frame = ctk.CTkFrame(self, fg_color="transparent")
         
+        # --- ミニ時計 (追加機能) ---
+        # タイマーの上に小さく表示
+        self.mini_clock_label = ctk.CTkLabel(self.mini_frame, text="--:--:--", font=("Arial", 12), text_color="gray")
+        self.mini_clock_label.pack(pady=(5, 0))
+
         # 時間表示（小）
         self.mini_time_label = ctk.CTkLabel(self.mini_frame, text="25:00", font=("Roboto Medium", 40))
-        self.mini_time_label.pack(pady=(10, 5))
+        self.mini_time_label.pack(pady=(0, 5))
         
         # コントロール（小）
         btn_frame = ctk.CTkFrame(self.mini_frame, fg_color="transparent")
@@ -164,6 +167,21 @@ class PomodoroApp(ctk.CTk):
         # 戻るボタン
         ctk.CTkButton(self.mini_frame, text="拡大 ⤢", command=self.switch_to_main, width=60, height=20, fg_color="transparent", border_width=1).pack(pady=5)
 
+    # --- 時計ロジック (修正済み) ---
+    def update_clock(self):
+        """現在時刻を更新する（メインとミニ両方）"""
+        now_str = datetime.datetime.now().strftime("%H:%M:%S")
+        
+        # メイン画面の時計更新
+        if hasattr(self, 'clock_label'):
+            self.clock_label.configure(text=now_str)
+            
+        # ミニ画面の時計更新
+        if hasattr(self, 'mini_clock_label'):
+            self.mini_clock_label.configure(text=now_str)
+        
+        self.after(1000, self.update_clock)
+
     # --- モード切替ロジック ---
 
     def show_main_view(self):
@@ -174,14 +192,14 @@ class PomodoroApp(ctk.CTk):
         self.is_mini_mode = True
         self.main_frame.pack_forget()
         self.mini_frame.pack(fill="both", expand=True)
-        self.geometry("200x150") # ミニサイズ
+        self.geometry("200x160") # 時計分少し縦に伸ばす
         self.attributes('-topmost', True) 
 
     def switch_to_main(self):
         self.is_mini_mode = False
         self.mini_frame.pack_forget()
         self.main_frame.pack(fill="both", expand=True)
-        self.geometry("400x600") # 元のサイズ
+        self.geometry("400x600")
         self.toggle_always_on_top()
 
     # --- タイマーロジック ---
@@ -246,11 +264,9 @@ class PomodoroApp(ctk.CTk):
         self.mini_start_btn.configure(fg_color="#1f6aa5")
         self.status_label.configure(text="Finished!", text_color="green")
         
-        # 音と通知
         threading.Thread(target=self.play_alarm_sound, daemon=True).start()
         self.send_notification()
 
-        # ログ保存
         mode = self.mode_var.get()
         if "Focus" in mode:
             duration = 25 if "25" in mode else 50
@@ -290,13 +306,11 @@ class PomodoroApp(ctk.CTk):
     # --- データ管理 ---
 
     def save_log(self, minutes, task_name):
-        # 現在時刻から開始時間を逆算
         now = datetime.datetime.now()
         end_time_str = now.strftime("%H:%M")
         start_time = now - datetime.timedelta(minutes=minutes)
         start_time_str = start_time.strftime("%H:%M")
         
-        # 表示用の時間範囲文字列 (例: 14:00 - 14:25)
         time_range = f"{start_time_str} - {end_time_str}"
         today = datetime.date.today().strftime("%Y-%m-%d")
 
@@ -321,11 +335,9 @@ class PomodoroApp(ctk.CTk):
             f = ctk.CTkFrame(self.history_scroll)
             f.pack(fill="x", pady=2, padx=5)
             
-            # 日付と時間を表示 (例: 10/08 14:00-14:25)
             time_display = time_rng if time_rng else ""
-            date_display = f"{date_str[5:]} {time_display}" # 月日 + 時間
+            date_display = f"{date_str[5:]} {time_display}"
 
-            # レイアウト
             ctk.CTkLabel(f, text=date_display, font=("Arial", 10), width=110, anchor="w").pack(side="left", padx=5)
             ctk.CTkLabel(f, text=task if task else "-", font=("Arial", 12), anchor="w").pack(side="left", padx=5, fill="x", expand=True)
             ctk.CTkLabel(f, text=f"{mins}分", font=("Arial", 12, "bold"), text_color="#3B8ED0").pack(side="right", padx=5)
@@ -339,7 +351,7 @@ class PomodoroApp(ctk.CTk):
             
             with open(filename, "w", newline="", encoding="utf-8_sig") as f:
                 writer = csv.writer(f)
-                writer.writerow(["ID", "Date", "Minutes", "Task Name", "Time Range"]) # ヘッダー
+                writer.writerow(["ID", "Date", "Minutes", "Task Name", "Time Range"])
                 writer.writerows(rows)
             
             self.export_btn.configure(text=f"出力完了: {filename}", fg_color="gray")
