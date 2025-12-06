@@ -54,8 +54,8 @@ class PomodoroApp(ctk.CTk):
         
         # 3種類のノイズを生成
         self.generate_noise_file("white_noise.wav", "white")
-        self.generate_noise_file("pink_noise.wav", "pink")   # 雨音に近い
-        self.generate_noise_file("brown_noise.wav", "brown") # 滝音に近い
+        self.generate_noise_file("pink_noise.wav", "pink")
+        self.generate_noise_file("brown_noise.wav", "brown")
 
     def generate_noise_file(self, filename, color="white", duration=5):
         """指定された色のノイズWAVファイルを生成する"""
@@ -66,30 +66,21 @@ class PomodoroApp(ctk.CTk):
         nframes = duration * framerate
         noise_data = []
         
-        # 音量設定 (32767が最大)
-        # ブラウンノイズは振幅が大きくなりやすいため少し抑える
+        # 音量設定
         vol = 2000 if color == "brown" else 3000
 
         last_val = 0
-        # ピンクノイズ用変数
         b0 = b1 = b2 = b3 = b4 = b5 = b6 = 0.0
 
         for _ in range(nframes):
             white = random.uniform(-1, 1)
             
             if color == "white":
-                # ホワイトノイズ: 完全ランダム
                 val = white * vol
-                
             elif color == "brown":
-                # ブラウンノイズ: ランダムウォーク (積分)
-                # 前回の値に少しランダムを足す = 低音成分が増える
                 last_val = (last_val + (0.02 * white)) / 1.02
-                val = last_val * vol * 30 # 補正
-                
+                val = last_val * vol * 30
             elif color == "pink":
-                # ピンクノイズ: Voss-McCartneyアルゴリズムの簡易版（フィルタ近似）
-                # ホワイトノイズにフィルタをかけて高音を削る
                 b0 = 0.99886 * b0 + white * 0.0555179
                 b1 = 0.99332 * b1 + white * 0.0750759
                 b2 = 0.96900 * b2 + white * 0.1538520
@@ -98,19 +89,15 @@ class PomodoroApp(ctk.CTk):
                 b5 = -0.7616 * b5 - white * 0.0168980
                 val = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.11
                 b6 = white * 0.115926
-                val = val * vol * 5 # 補正
-
+                val = val * vol * 5
             else:
                 val = 0
 
-            # クリッピング（音が割れないように制限）
             val = max(-32000, min(32000, int(val)))
             noise_data.append(int(val))
             
-        # バイナリにパック
         packed_data = struct.pack('h' * len(noise_data), *noise_data)
         
-        # WAVファイル書き出し
         with wave.open(filename, 'w') as f:
             f.setnchannels(1) 
             f.setsampwidth(2) 
@@ -195,7 +182,6 @@ class PomodoroApp(ctk.CTk):
         self.bgm_var = ctk.StringVar(value="None")
         self.bgm_menu = ctk.CTkOptionMenu(
             bgm_frame, 
-            # 表示名を分かりやすく変更
             values=["None", "White Noise", "Pink Noise (Rain)", "Brown Noise (River)"],
             variable=self.bgm_var,
             command=self.on_bgm_change,
@@ -278,7 +264,6 @@ class PomodoroApp(ctk.CTk):
         if bgm_name == "None":
             return
         
-        # ファイル名のマッピング
         filename = ""
         if "White Noise" in bgm_name:
             filename = "white_noise.wav"
@@ -287,7 +272,6 @@ class PomodoroApp(ctk.CTk):
         elif "Brown Noise" in bgm_name:
             filename = "brown_noise.wav"
         else:
-            # 外部ファイル対応
             if not os.path.exists("sounds"):
                 try: os.makedirs("sounds")
                 except: pass
@@ -360,6 +344,11 @@ class PomodoroApp(ctk.CTk):
 
     def start_timer(self):
         if not self.timer_running:
+            # 【修正点】残り時間が0ならリセットしてスタートする（重複ログ回避）
+            if self.timer_seconds == 0:
+                self.timer_seconds = self.selected_duration
+                self.update_time_display()
+
             self.timer_running = True
             self.start_btn.configure(text="PAUSE", fg_color="orange")
             self.mini_start_btn.configure(fg_color="orange")
