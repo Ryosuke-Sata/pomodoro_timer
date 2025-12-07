@@ -1,0 +1,3 @@
+customtkinter
+winotify
+pygame-ce
