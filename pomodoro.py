@@ -48,10 +48,20 @@ class PomodoroApp(ctk.CTk):
         self.create_bar_layout()
         
         # 初期状態はメインモードを表示
+        # 起動時に画面中央へ
+        self.center_window_on_start(400, 700)
         self.show_main_view()
 
         # 時計の更新開始
         self.update_clock()
+
+    def center_window_on_start(self, w, h):
+        """起動時に画面中央に配置する"""
+        screen_w = self.winfo_screenwidth()
+        screen_h = self.winfo_screenheight()
+        x = (screen_w - w) // 2
+        y = (screen_h - h) // 2
+        self.geometry(f"{w}x{h}+{x}+{y}")
 
     def init_audio(self):
         pygame.mixer.init()
@@ -187,41 +197,30 @@ class PomodoroApp(ctk.CTk):
         ctk.CTkButton(self.mini_frame, text="拡大 ⤢", command=self.switch_to_main, width=60, height=20, fg_color="transparent", border_width=1).pack(pady=5)
 
     def create_bar_layout(self):
-        """バーモード（ドラッグ可能・画面下部推奨）のUI"""
-        self.bar_frame = ctk.CTkFrame(self, fg_color="#2b2b2b", corner_radius=10) # 丸みをつける
-        
+        self.bar_frame = ctk.CTkFrame(self, fg_color="#2b2b2b", corner_radius=10) 
         inner_frame = ctk.CTkFrame(self.bar_frame, fg_color="transparent")
         inner_frame.pack(fill="both", expand=True, padx=10, pady=2)
 
-        # --- ドラッグ移動のバインド ---
-        # 掴んで動かせるようにする
         for widget in [self.bar_frame, inner_frame]:
             widget.bind("<Button-1>", self.start_move)
             widget.bind("<B1-Motion>", self.do_move)
 
         self.bar_task_label = ctk.CTkLabel(inner_frame, text="No Task", font=("Yu Gothic UI", 12), text_color="gray")
         self.bar_task_label.pack(side="left", padx=10)
-        
         self.bar_clock_label = ctk.CTkLabel(inner_frame, text="--:--", font=("Arial", 12), text_color="gray")
         self.bar_clock_label.pack(side="left", padx=10)
-
         self.bar_time_label = ctk.CTkLabel(inner_frame, text="25:00", font=("Roboto Medium", 24), text_color="#3B8ED0")
         self.bar_time_label.pack(side="left", padx=15)
-
         self.bar_start_btn = ctk.CTkButton(inner_frame, text="⏯", command=self.start_timer, width=30, height=25)
         self.bar_start_btn.pack(side="left", padx=5)
-        
         ctk.CTkButton(inner_frame, text="⏹", command=self.reset_timer, width=30, height=25, fg_color="gray").pack(side="left", padx=5)
-
         ctk.CTkButton(inner_frame, text="拡大 ⤢", command=self.switch_to_main, width=40, height=20, fg_color="transparent", border_width=1).pack(side="right", padx=5)
         
-        # ラベル類もドラッグ可能にする
         for widget in inner_frame.winfo_children():
             if isinstance(widget, ctk.CTkLabel):
                 widget.bind("<Button-1>", self.start_move)
                 widget.bind("<B1-Motion>", self.do_move)
 
-    # --- 移動ロジック ---
     def start_move(self, event):
         self.drag_start_x = event.x
         self.drag_start_y = event.y
@@ -230,8 +229,6 @@ class PomodoroApp(ctk.CTk):
         x = self.winfo_x() + (event.x - self.drag_start_x)
         y = self.winfo_y() + (event.y - self.drag_start_y)
         self.geometry(f"+{x}+{y}")
-
-    # --- ロジック ---
 
     def update_clock(self):
         now_str = datetime.datetime.now().strftime("%H:%M:%S")
@@ -255,7 +252,6 @@ class PomodoroApp(ctk.CTk):
         self.attributes('-topmost', True) 
 
     def switch_to_bar(self):
-        """コンパクトなバーモードへ切り替え（デフォルト位置：画面下部）"""
         self.view_mode = "bar"
         self.main_frame.pack_forget()
         self.mini_frame.pack_forget()
@@ -264,25 +260,38 @@ class PomodoroApp(ctk.CTk):
         task = self.task_entry.get()
         self.bar_task_label.configure(text=task if task else "No Task")
 
-        # 画面下部に配置 (横幅500px)
-        w = 500
-        h = 40
+        w, h = 500, 40
         x = (self.winfo_screenwidth() // 2) - (w // 2)
-        y = self.winfo_screenheight() - 100 # タスクバーの上あたり
+        y = self.winfo_screenheight() - 100 
         
         self.geometry(f"{w}x{h}+{x}+{y}")
-        self.overrideredirect(True) # 枠なし
+        self.overrideredirect(True) 
         self.attributes('-topmost', True)
 
     def switch_to_main(self):
         self.view_mode = "main"
-        self.overrideredirect(False)
-        self.withdraw()
-        self.deiconify()
+        
         self.mini_frame.pack_forget()
         self.bar_frame.pack_forget()
         self.main_frame.pack(fill="both", expand=True)
-        self.geometry("400x700")
+        
+        # 1. 枠を戻す
+        self.overrideredirect(False)
+        
+        # 2. 変更を適用させるために一度隠してアイドル状態を処理する (重要)
+        self.withdraw()
+        self.update_idletasks()
+        
+        # 3. 画面サイズと位置を計算して適用
+        w, h = 400, 700
+        screen_w = self.winfo_screenwidth()
+        screen_h = self.winfo_screenheight()
+        x = (screen_w - w) // 2
+        y = (screen_h - h) // 2
+        self.geometry(f"{w}x{h}+{x}+{y}")
+        
+        # 4. 再表示
+        self.deiconify()
         self.toggle_always_on_top()
 
     def toggle_always_on_top(self):
@@ -305,6 +314,9 @@ class PomodoroApp(ctk.CTk):
         self.time_label.configure(text=time_text)
         self.mini_time_label.configure(text=time_text)
         if hasattr(self, 'bar_time_label'): self.bar_time_label.configure(text=time_text)
+        
+        mode_name = "Work" if "Focus" in self.mode_var.get() else "Break"
+        self.title(f"{time_text} - {mode_name}")
 
     def start_timer(self):
         if not self.timer_running:
@@ -421,16 +433,42 @@ class PomodoroApp(ctk.CTk):
             ctk.CTkLabel(f, text=date_disp, font=("Yu Gothic UI", 10), width=110, anchor="w").pack(side="left", padx=5)
             ctk.CTkLabel(f, text=task if task else "-", font=("Yu Gothic UI", 12), anchor="w").pack(side="left", padx=5, fill="x", expand=True)
             ctk.CTkLabel(f, text=f"{mins}分", font=("Arial", 12, "bold"), text_color="#3B8ED0").pack(side="right", padx=5)
+
     def export_csv(self):
         try:
-            filename = f"pomodoro_log_{datetime.date.today()}.csv"
             self.cursor.execute("SELECT id, date, duration_minutes, task_name, time_range FROM logs")
+            rows = self.cursor.fetchall()
+            
+            if not rows:
+                self.export_btn.configure(text="データなし", fg_color="gray")
+                self.after(2000, lambda: self.export_btn.configure(text="CSV出力 (Excel用)", fg_color="green"))
+                return
+
+            export_dir = "exports"
+            if not os.path.exists(export_dir):
+                os.makedirs(export_dir)
+
+            filename = f"{export_dir}/pomodoro_log_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            
             with open(filename, "w", newline="", encoding="utf-8_sig") as f:
-                writer = csv.writer(f); writer.writerow(["ID", "Date", "Minutes", "Task Name", "Time Range"]); writer.writerows(self.cursor.fetchall())
-            self.export_btn.configure(text=f"出力完了: {filename}", fg_color="gray")
+                writer = csv.writer(f)
+                writer.writerow(["ID", "Date", "Minutes", "Task Name", "Time Range"])
+                writer.writerows(rows)
+            
+            self.cursor.execute("DELETE FROM logs")
+            self.conn.commit()
+            
+            self.load_history()
+
+            self.export_btn.configure(text="出力＆履歴クリア完了", fg_color="gray")
             self.after(3000, lambda: self.export_btn.configure(text="CSV出力 (Excel用)", fg_color="green"))
-            os.startfile(".")
-        except: self.export_btn.configure(text="エラー発生", fg_color="red")
+            
+            # フォルダを開かないように変更
+            # os.startfile(export_dir) 
+            
+        except Exception as e:
+            print(e)
+            self.export_btn.configure(text="エラー発生", fg_color="red")
 
 if __name__ == "__main__":
     app = PomodoroApp()
