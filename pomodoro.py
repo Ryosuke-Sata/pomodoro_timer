@@ -10,6 +10,7 @@ import random
 import struct
 import wave
 import pygame
+import ctypes
 from winotify import Notification, audio
 
 # --- 設定 ---
@@ -254,35 +255,66 @@ class PomodoroApp(ctk.CTk):
         self.attributes('-topmost', True) 
 
     def switch_to_bar(self):
+        """コンパクトなバーモードへ切り替え"""
         self.view_mode = "bar"
         self.main_frame.pack_forget()
         self.mini_frame.pack_forget()
         self.bar_frame.pack(fill="both", expand=True)
+        
         task = self.task_entry.get()
         self.bar_task_label.configure(text=task if task else "No Task")
+
         w, h = 500, 40
         x = (self.winfo_screenwidth() // 2) - (w // 2)
         y = self.winfo_screenheight() - 100 
+        
         self.withdraw()
         self.overrideredirect(True) 
         self.geometry(f"{w}x{h}+{x}+{y}")
         self.deiconify()
         self.attributes('-topmost', True)
+        
+        # 【修正】タイミングを少し遅らせてタスクバー表示を強制する
+        self.after(200, self.force_taskbar_icon)
+
+    def force_taskbar_icon(self):
+        """overrideredirect(True)の状態でもタスクバーにアイコンを表示させる"""
+        try:
+            self.update_idletasks() # ハンドル取得前にIDを確定させる
+            hwnd = ctypes.windll.user32.GetParent(self.winfo_id())
+            
+            # 定数定義
+            GWL_EXSTYLE = -20
+            WS_EX_APPWINDOW = 0x00040000
+            WS_EX_TOOLWINDOW = 0x00000080
+            
+            # スタイル変更
+            style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+            style = style & ~WS_EX_TOOLWINDOW
+            style = style | WS_EX_APPWINDOW
+            ctypes.windll.user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
+            
+            # 変更を反映させるためにウィンドウ位置をわずかに更新するおまじない
+            # (これがないと即座に反映されない場合がある)
+            ctypes.windll.user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, 0x27) # SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED
+        except Exception as e:
+            print(f"Force taskbar icon error: {e}")
 
     def switch_to_main(self):
         self.view_mode = "main"
+        
         self.mini_frame.pack_forget()
         self.bar_frame.pack_forget()
         self.main_frame.pack(fill="both", expand=True)
+        
         self.overrideredirect(False)
         self.withdraw()
-        self.update_idletasks() # 状態確定待ち
+        self.update_idletasks()
         self.center_window(400, 700)
         self.deiconify()
         self.toggle_always_on_top()
 
     def center_window(self, w, h):
-        """ウィンドウを画面中央に配置するヘルパー関数"""
         screen_w = self.winfo_screenwidth()
         screen_h = self.winfo_screenheight()
         x = (screen_w - w) // 2
@@ -309,6 +341,7 @@ class PomodoroApp(ctk.CTk):
         self.time_label.configure(text=time_text)
         self.mini_time_label.configure(text=time_text)
         if hasattr(self, 'bar_time_label'): self.bar_time_label.configure(text=time_text)
+        
         mode_name = "Work" if "Focus" in self.mode_var.get() else "Break"
         self.title(f"{time_text} - {mode_name}")
 
@@ -435,33 +468,25 @@ class PomodoroApp(ctk.CTk):
             if not os.path.exists(export_dir):
                 os.makedirs(export_dir)
 
-            # --- 修正点: 日付ごとにグループ化して出力 ---
             data_by_date = {}
             for row in rows:
-                # row[1] is date string "YYYY-MM-DD"
                 date_key = row[1]
                 if date_key not in data_by_date:
                     data_by_date[date_key] = []
                 data_by_date[date_key].append(row)
 
-            # 日付ごとに書き込み
             for date_key, day_rows in data_by_date.items():
                 filename = f"{export_dir}/{date_key}.csv"
                 file_exists = os.path.isfile(filename)
-                
                 with open(filename, "a", newline="", encoding="utf-8_sig") as f:
                     writer = csv.writer(f)
-                    # ファイルが新規作成の場合のみヘッダーを書き込む
                     if not file_exists:
                         writer.writerow(["ID", "Date", "Minutes", "Task Name", "Time Range"])
                     writer.writerows(day_rows)
             
-            # DBのクリア
             self.cursor.execute("DELETE FROM logs")
             self.conn.commit()
-            
             self.load_history()
-
             self.export_btn.configure(text="出力＆履歴クリア完了", fg_color="gray")
             self.after(3000, lambda: self.export_btn.configure(text="CSV出力 (Excel用)", fg_color="green"))
             
