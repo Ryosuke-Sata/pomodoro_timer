@@ -32,6 +32,7 @@ class PomodoroApp(ctk.CTk):
         self.selected_duration = 25 * 60
         self.timer_id = None
         self.view_mode = "main" # main, mini, bar
+        self.is_typing = False 
         
         # ドラッグ移動用変数
         self.drag_start_x = 0
@@ -133,8 +134,20 @@ class PomodoroApp(ctk.CTk):
 
         t_frame = self.tabview.tab("Timer")
         ctk.CTkLabel(t_frame, text="作業内容 (Task Name)", font=("Yu Gothic UI", 12)).pack(pady=(5, 0))
-        self.task_entry = ctk.CTkEntry(t_frame, placeholder_text="例: 英語の勉強", width=250, font=("Yu Gothic UI", 14), text_color=("black", "white"))
+        
+        self.task_entry = ctk.CTkEntry(
+            t_frame, 
+            placeholder_text="例: 英語の勉強", 
+            width=250, 
+            font=("Yu Gothic UI", 14), 
+            text_color=("black", "white")
+        )
         self.task_entry.pack(pady=5)
+
+        # 【修正】 add="+" を追加して、プレースホルダー機能を消さないようにする
+        self.task_entry._entry.bind("<FocusIn>", self.on_entry_focus_in, add="+")
+        self.task_entry._entry.bind("<FocusOut>", self.on_entry_focus_out, add="+")
+        self.task_entry._entry.bind("<Return>", self.on_entry_return, add="+")
 
         self.mode_var = ctk.StringVar(value="Focus 25")
         self.mode_segment = ctk.CTkSegmentedButton(t_frame, values=["Focus 25", "Focus 50", "Break 5", "Break 15"], command=self.change_mode, variable=self.mode_var)
@@ -163,7 +176,8 @@ class PomodoroApp(ctk.CTk):
 
         opt_frame = ctk.CTkFrame(t_frame, fg_color="transparent")
         opt_frame.pack(pady=10)
-        self.top_switch = ctk.CTkSwitch(opt_frame, text="常に最前面", command=self.toggle_always_on_top)
+        
+        self.top_switch = ctk.CTkSwitch(opt_frame, text="常に最前面", command=self.check_topmost)
         self.top_switch.pack(side="left", padx=10)
         
         self.mini_btn = ctk.CTkButton(opt_frame, text="ミニ", command=self.switch_to_mini, width=60, fg_color="teal")
@@ -184,6 +198,33 @@ class PomodoroApp(ctk.CTk):
         ctk.CTkButton(h_frame, text="履歴更新", command=self.load_history, height=30).pack(pady=5)
         self.load_history()
 
+    # --- 最前面制御ロジック ---
+    def check_topmost(self):
+        """現在の状態を確認して最前面設定を適用する"""
+        if self.is_typing:
+            self.attributes('-topmost', False)
+            return
+
+        if self.view_mode != "main":
+            self.attributes('-topmost', True)
+            return
+
+        state = self.top_switch.get() == 1
+        self.attributes('-topmost', state)
+
+    # --- イベントハンドラ ---
+    def on_entry_focus_in(self, event):
+        self.is_typing = True
+        self.check_topmost() 
+
+    def on_entry_focus_out(self, event):
+        self.is_typing = False
+        self.check_topmost() 
+
+    def on_entry_return(self, event):
+        self.focus() 
+
+    # --- レイアウト作成 (Mini/Bar) ---
     def create_mini_layout(self):
         self.mini_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.mini_clock_label = ctk.CTkLabel(self.mini_frame, text="--:--:--", font=("Arial", 12), text_color="gray")
@@ -252,67 +293,51 @@ class PomodoroApp(ctk.CTk):
         self.overrideredirect(False)
         self.geometry("200x160")
         self.deiconify()
-        self.attributes('-topmost', True) 
+        self.check_topmost() 
 
     def switch_to_bar(self):
-        """コンパクトなバーモードへ切り替え"""
         self.view_mode = "bar"
         self.main_frame.pack_forget()
         self.mini_frame.pack_forget()
         self.bar_frame.pack(fill="both", expand=True)
-        
         task = self.task_entry.get()
         self.bar_task_label.configure(text=task if task else "No Task")
-
         w, h = 500, 40
         x = (self.winfo_screenwidth() // 2) - (w // 2)
         y = self.winfo_screenheight() - 100 
-        
         self.withdraw()
         self.overrideredirect(True) 
         self.geometry(f"{w}x{h}+{x}+{y}")
         self.deiconify()
-        self.attributes('-topmost', True)
-        
-        # 【修正】タイミングを少し遅らせてタスクバー表示を強制する
         self.after(200, self.force_taskbar_icon)
+        self.check_topmost()
 
     def force_taskbar_icon(self):
-        """overrideredirect(True)の状態でもタスクバーにアイコンを表示させる"""
         try:
-            self.update_idletasks() # ハンドル取得前にIDを確定させる
+            self.update_idletasks()
             hwnd = ctypes.windll.user32.GetParent(self.winfo_id())
-            
-            # 定数定義
             GWL_EXSTYLE = -20
             WS_EX_APPWINDOW = 0x00040000
             WS_EX_TOOLWINDOW = 0x00000080
-            
-            # スタイル変更
             style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
             style = style & ~WS_EX_TOOLWINDOW
             style = style | WS_EX_APPWINDOW
             ctypes.windll.user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
-            
-            # 変更を反映させるためにウィンドウ位置をわずかに更新するおまじない
-            # (これがないと即座に反映されない場合がある)
-            ctypes.windll.user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, 0x27) # SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED
+            ctypes.windll.user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, 0x27)
         except Exception as e:
             print(f"Force taskbar icon error: {e}")
 
     def switch_to_main(self):
         self.view_mode = "main"
-        
         self.mini_frame.pack_forget()
         self.bar_frame.pack_forget()
         self.main_frame.pack(fill="both", expand=True)
-        
         self.overrideredirect(False)
         self.withdraw()
         self.update_idletasks()
         self.center_window(400, 700)
         self.deiconify()
-        self.toggle_always_on_top()
+        self.check_topmost() 
 
     def center_window(self, w, h):
         screen_w = self.winfo_screenwidth()
@@ -341,7 +366,6 @@ class PomodoroApp(ctk.CTk):
         self.time_label.configure(text=time_text)
         self.mini_time_label.configure(text=time_text)
         if hasattr(self, 'bar_time_label'): self.bar_time_label.configure(text=time_text)
-        
         mode_name = "Work" if "Focus" in self.mode_var.get() else "Break"
         self.title(f"{time_text} - {mode_name}")
 
