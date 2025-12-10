@@ -244,14 +244,22 @@ class PomodoroApp(ctk.CTk):
 
     def switch_to_mini(self):
         self.view_mode = "mini"
-        self.overrideredirect(False)
+        
         self.main_frame.pack_forget()
         self.bar_frame.pack_forget()
         self.mini_frame.pack(fill="both", expand=True)
+        
+        # 確実に設定を適用するために一度隠して再表示
+        self.withdraw()
+        self.overrideredirect(False)
         self.geometry("200x160")
+        self.deiconify()
+        
+        # 強制的に最前面
         self.attributes('-topmost', True) 
 
     def switch_to_bar(self):
+        """コンパクトなバーモードへ切り替え（デフォルト位置：画面下部）"""
         self.view_mode = "bar"
         self.main_frame.pack_forget()
         self.mini_frame.pack_forget()
@@ -264,8 +272,13 @@ class PomodoroApp(ctk.CTk):
         x = (self.winfo_screenwidth() // 2) - (w // 2)
         y = self.winfo_screenheight() - 100 
         
+        # 確実に設定を適用するために一度隠して再表示
+        self.withdraw()
+        self.overrideredirect(True) # 枠なし
         self.geometry(f"{w}x{h}+{x}+{y}")
-        self.overrideredirect(True) 
+        self.deiconify()
+        
+        # 強制的に最前面
         self.attributes('-topmost', True)
 
     def switch_to_main(self):
@@ -275,24 +288,22 @@ class PomodoroApp(ctk.CTk):
         self.bar_frame.pack_forget()
         self.main_frame.pack(fill="both", expand=True)
         
-        # 1. 枠を戻す
         self.overrideredirect(False)
-        
-        # 2. 変更を適用させるために一度隠してアイドル状態を処理する (重要)
         self.withdraw()
-        self.update_idletasks()
+        self.update_idletasks() # 状態確定待ち
         
-        # 3. 画面サイズと位置を計算して適用
-        w, h = 400, 700
+        self.center_window(400, 700)
+        
+        self.deiconify()
+        self.toggle_always_on_top()
+
+    def center_window(self, w, h):
+        """ウィンドウを画面中央に配置するヘルパー関数"""
         screen_w = self.winfo_screenwidth()
         screen_h = self.winfo_screenheight()
         x = (screen_w - w) // 2
         y = (screen_h - h) // 2
         self.geometry(f"{w}x{h}+{x}+{y}")
-        
-        # 4. 再表示
-        self.deiconify()
-        self.toggle_always_on_top()
 
     def toggle_always_on_top(self):
         if self.view_mode != "main":
@@ -462,9 +473,6 @@ class PomodoroApp(ctk.CTk):
 
             self.export_btn.configure(text="出力＆履歴クリア完了", fg_color="gray")
             self.after(3000, lambda: self.export_btn.configure(text="CSV出力 (Excel用)", fg_color="green"))
-            
-            # フォルダを開かないように変更
-            # os.startfile(export_dir) 
             
         except Exception as e:
             print(e)
