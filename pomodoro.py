@@ -244,56 +244,40 @@ class PomodoroApp(ctk.CTk):
 
     def switch_to_mini(self):
         self.view_mode = "mini"
-        
         self.main_frame.pack_forget()
         self.bar_frame.pack_forget()
         self.mini_frame.pack(fill="both", expand=True)
-        
-        # 確実に設定を適用するために一度隠して再表示
         self.withdraw()
         self.overrideredirect(False)
         self.geometry("200x160")
         self.deiconify()
-        
-        # 強制的に最前面
         self.attributes('-topmost', True) 
 
     def switch_to_bar(self):
-        """コンパクトなバーモードへ切り替え（デフォルト位置：画面下部）"""
         self.view_mode = "bar"
         self.main_frame.pack_forget()
         self.mini_frame.pack_forget()
         self.bar_frame.pack(fill="both", expand=True)
-        
         task = self.task_entry.get()
         self.bar_task_label.configure(text=task if task else "No Task")
-
         w, h = 500, 40
         x = (self.winfo_screenwidth() // 2) - (w // 2)
         y = self.winfo_screenheight() - 100 
-        
-        # 確実に設定を適用するために一度隠して再表示
         self.withdraw()
-        self.overrideredirect(True) # 枠なし
+        self.overrideredirect(True) 
         self.geometry(f"{w}x{h}+{x}+{y}")
         self.deiconify()
-        
-        # 強制的に最前面
         self.attributes('-topmost', True)
 
     def switch_to_main(self):
         self.view_mode = "main"
-        
         self.mini_frame.pack_forget()
         self.bar_frame.pack_forget()
         self.main_frame.pack(fill="both", expand=True)
-        
         self.overrideredirect(False)
         self.withdraw()
         self.update_idletasks() # 状態確定待ち
-        
         self.center_window(400, 700)
-        
         self.deiconify()
         self.toggle_always_on_top()
 
@@ -325,7 +309,6 @@ class PomodoroApp(ctk.CTk):
         self.time_label.configure(text=time_text)
         self.mini_time_label.configure(text=time_text)
         if hasattr(self, 'bar_time_label'): self.bar_time_label.configure(text=time_text)
-        
         mode_name = "Work" if "Focus" in self.mode_var.get() else "Break"
         self.title(f"{time_text} - {mode_name}")
 
@@ -334,12 +317,10 @@ class PomodoroApp(ctk.CTk):
             if self.timer_seconds == 0:
                 self.timer_seconds = self.selected_duration
                 self.update_time_display()
-
             self.timer_running = True
             self.start_btn.configure(text="PAUSE", fg_color="orange")
             self.mini_start_btn.configure(fg_color="orange")
             if hasattr(self, 'bar_start_btn'): self.bar_start_btn.configure(fg_color="orange")
-            
             self.status_label.configure(text="Concentrating...", text_color="#3B8ED0")
             self.play_bgm()
             self.count_down()
@@ -351,7 +332,6 @@ class PomodoroApp(ctk.CTk):
         self.start_btn.configure(text="RESUME", fg_color="#1f6aa5")
         self.mini_start_btn.configure(fg_color="#1f6aa5")
         if hasattr(self, 'bar_start_btn'): self.bar_start_btn.configure(fg_color="#1f6aa5")
-        
         self.status_label.configure(text="Paused", text_color="orange")
         self.stop_bgm()
         if self.timer_id:
@@ -364,7 +344,6 @@ class PomodoroApp(ctk.CTk):
         self.start_btn.configure(text="START", fg_color="#1f6aa5")
         self.mini_start_btn.configure(fg_color="#1f6aa5")
         if hasattr(self, 'bar_start_btn'): self.bar_start_btn.configure(fg_color="#1f6aa5")
-        
         self.status_label.configure(text="Ready", text_color="gray")
         self.stop_bgm()
 
@@ -382,11 +361,9 @@ class PomodoroApp(ctk.CTk):
         self.mini_start_btn.configure(fg_color="#1f6aa5")
         if hasattr(self, 'bar_start_btn'): self.bar_start_btn.configure(fg_color="#1f6aa5")
         self.status_label.configure(text="Finished!", text_color="green")
-        
         self.stop_bgm()
         threading.Thread(target=self.play_alarm_sound, daemon=True).start()
         self.send_notification()
-
         mode = self.mode_var.get()
         if "Focus" in mode:
             duration = 25 if "25" in mode else 50
@@ -394,7 +371,6 @@ class PomodoroApp(ctk.CTk):
             if not task_name: task_name = "名無しのタスク"
             self.save_log(duration, task_name)
             self.load_history()
-
         self.attributes('-topmost', True)
 
     def on_bgm_change(self, choice):
@@ -459,13 +435,28 @@ class PomodoroApp(ctk.CTk):
             if not os.path.exists(export_dir):
                 os.makedirs(export_dir)
 
-            filename = f"{export_dir}/pomodoro_log_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            # --- 修正点: 日付ごとにグループ化して出力 ---
+            data_by_date = {}
+            for row in rows:
+                # row[1] is date string "YYYY-MM-DD"
+                date_key = row[1]
+                if date_key not in data_by_date:
+                    data_by_date[date_key] = []
+                data_by_date[date_key].append(row)
+
+            # 日付ごとに書き込み
+            for date_key, day_rows in data_by_date.items():
+                filename = f"{export_dir}/{date_key}.csv"
+                file_exists = os.path.isfile(filename)
+                
+                with open(filename, "a", newline="", encoding="utf-8_sig") as f:
+                    writer = csv.writer(f)
+                    # ファイルが新規作成の場合のみヘッダーを書き込む
+                    if not file_exists:
+                        writer.writerow(["ID", "Date", "Minutes", "Task Name", "Time Range"])
+                    writer.writerows(day_rows)
             
-            with open(filename, "w", newline="", encoding="utf-8_sig") as f:
-                writer = csv.writer(f)
-                writer.writerow(["ID", "Date", "Minutes", "Task Name", "Time Range"])
-                writer.writerows(rows)
-            
+            # DBのクリア
             self.cursor.execute("DELETE FROM logs")
             self.conn.commit()
             
