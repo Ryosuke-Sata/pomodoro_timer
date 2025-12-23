@@ -144,7 +144,7 @@ class PomodoroApp(ctk.CTk):
         )
         self.task_entry.pack(pady=5)
 
-        # 【修正】 add="+" を追加して、プレースホルダー機能を消さないようにする
+        # プレースホルダー機能を維持するために add="+" を指定
         self.task_entry._entry.bind("<FocusIn>", self.on_entry_focus_in, add="+")
         self.task_entry._entry.bind("<FocusOut>", self.on_entry_focus_out, add="+")
         self.task_entry._entry.bind("<Return>", self.on_entry_return, add="+")
@@ -300,8 +300,16 @@ class PomodoroApp(ctk.CTk):
         self.main_frame.pack_forget()
         self.mini_frame.pack_forget()
         self.bar_frame.pack(fill="both", expand=True)
+        
         task = self.task_entry.get()
-        self.bar_task_label.configure(text=task if task else "No Task")
+        # 【修正】文字数制限ロジック (10文字以上は省略)
+        if task and len(task) > 10:
+            display_text = task[:10] + "..."
+        else:
+            display_text = task if task else "No Task"
+            
+        self.bar_task_label.configure(text=display_text)
+
         w, h = 500, 40
         x = (self.winfo_screenwidth() // 2) - (w // 2)
         y = self.winfo_screenheight() - 100 
