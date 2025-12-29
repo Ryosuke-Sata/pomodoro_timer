@@ -45,23 +45,13 @@ python -m venv .venv
 
 ### 3\. ライブラリのインストール
 
-`requirements.txt` を作成し、以下の内容を記述してください。
-
-**requirements.txt**
-
-```text
-customtkinter
-winotify
-pygame-ce
-```
-
-その後、以下のコマンドでインストールします。
+以下のコマンドで必要なライブラリをインストールします。
 
 ```bash
 pip install -r requirements.txt
 ```
 
-> **注意**: Python 3.11以降を使用している場合、標準の `pygame` ではインストールエラーが発生することがあります。必ず **`pygame-ce`** を指定してください。
+> **注意**: Python 3.11以降を使用している場合、標準の `pygame` ではインストールエラーが発生することがあります。このプロジェクトでは互換性の高い **`pygame-ce`** を使用しています（requirements.txtに記述済み）。
 
 ## 🚀 使い方
 
@@ -88,7 +78,7 @@ python pomodoro.py
 
 ## 📂 ファイル構成とGit管理
 
-リポジトリをクリーンに保つため、以下のファイル・フォルダは `.gitignore` に追加することを推奨します。
+リポジトリをクリーンに保つため、以下のファイル・フォルダが `.gitignore` に設定されています。
 
 ```gitignore
 # 仮想環境
